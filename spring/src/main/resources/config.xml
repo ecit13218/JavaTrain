@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<beans>
+    <bean id = "accountDao" class ="com.zhengyao.dao.impl.JdbcAccountDaoImpl"/>
+    <bean id = "transferService" class ="com.zhengyao.service.impl.TransferServiceImpl">
+        <property id = "AccountDao" ref = "accountDao"/>
+    </bean>
+</beans>

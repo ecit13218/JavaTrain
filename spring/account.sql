@@ -1,0 +1,2 @@
+INSERT INTO `account` VALUES ('111111', 'A', 5700);
+INSERT INTO `account` VALUES ('222222', 'B', 14400);
