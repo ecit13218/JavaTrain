@@ -17,6 +17,7 @@ public class JdbcTest {
         Class.forName("com.mysql.jdbc.Driver");
         //ABCD
         //测试git123123123
+        //新的分支
         //改造同一行
         //数据库连接
         String url = "jdbc:mysql://localhost:3306/learn_mybatis?characterEncoding=utf-8";
