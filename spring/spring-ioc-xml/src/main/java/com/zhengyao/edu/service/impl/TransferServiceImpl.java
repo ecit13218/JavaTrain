@@ -33,5 +33,6 @@ public class TransferServiceImpl implements TransferService {
 
             accountDao.updateAccountByCardNo(to);
             accountDao.updateAccountByCardNo(from);
+            System.out.println(accountDao);
     }
 }

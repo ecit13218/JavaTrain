@@ -10,6 +10,8 @@ public class CreateBeanFactory {
 
 
     public static ConnectionUtils getInstanceStatic() {
+        
+        //业务逻辑创建对象
         return new ConnectionUtils();
     }
 

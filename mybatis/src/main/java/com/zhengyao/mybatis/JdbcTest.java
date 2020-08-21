@@ -15,10 +15,6 @@ public class JdbcTest {
     public static void main(String[] args) throws ClassNotFoundException, SQLException {
         //加载数据库驱动
         Class.forName("com.mysql.jdbc.Driver");
-        //ABCD
-        //测试git123123123
-        //新的分支
-        //改造同一行
         //数据库连接
         String url = "jdbc:mysql://localhost:3306/learn_mybatis?characterEncoding=utf-8";
         String userName = "root";

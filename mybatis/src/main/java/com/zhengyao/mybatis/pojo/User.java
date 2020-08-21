@@ -4,6 +4,7 @@ public class User {
 
     private Integer id;
     private String username;
+    private String password;
 
     @Override
     public String toString() {

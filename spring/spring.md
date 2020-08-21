@@ -485,6 +485,231 @@ prototype（原型模式，也叫多例模式）
 
   ![image-20200806171752238](spring/images/image-20200806171752238.png)
 
+### xml与注解相结合模式
+
+1. 实际企业开发中，纯xml模式使⽤已经很少了
+2. 引⼊注解功能，不需要引⼊额外的jar
+3. xml+注解结合模式，xml⽂件依然存在，所以，spring IOC容器的启动仍然从加载xml开始
+4. 哪些bean的定义写在xml中，哪些bean的定义使⽤注解
+
+**xml中标签与注解的对应（IoC）**
+
+| xml形式                  | 对应的注解形式                                               |
+| ------------------------ | ------------------------------------------------------------ |
+| 标签                     | @Component("accountDao")，注解加在类上bean的id属性内容直接配置在注解后⾯如果不配置，默认定义个这个bean的id为类的类名⾸字⺟⼩写；另外，针对分层代码开发提供了@Componenet的三种别名@Controller、@Service、@Repository分别⽤于控制层类、服务层类、dao层类的bean定义，这四个注解的⽤法完全⼀样，只是为了更清晰的区分⽽已 |
+| 标签的scope属性          | @Scope("prototype")，默认单例，注解加在类上                  |
+| 标签的init-method属性    | @PostConstruct，注解加在⽅法上，该⽅法就是初始化后调⽤的⽅法 |
+| 标签的destory-method属性 | @PreDestory，注解加在⽅法上，该⽅法就是销毁前调⽤的⽅法      |
+|                          |                                                              |
+|                          |                                                              |
+
+DI 依赖注⼊的注解实现⽅式：
+
+@Autowired（推荐使⽤）
+
+@Autowired为Spring提供的注解，需要导⼊包org.springframework.beans.factory.annotation.Autowired。@Autowired采取的策略为按照类型注⼊。
+
+```java
+public class TransferServiceImpl {
+    @Autowired
+    private AccountDao accountDao;
+}
+```
+
+如上代码所示，这样装配回去spring容器中找到类型为AccountDao的类，然后将其注⼊进来。这
+样会产⽣⼀个问题，当⼀个类型有多个bean值的时候，会造成⽆法选择具体注⼊哪⼀个的情况，
+这个时候我们需要配合着@Qualifier使⽤。@Qualifier告诉Spring具体去装配哪个对象。
+
+```java
+public class TransferServiceImpl {
+    @Autowired
+    @Qualifier(name="jdbcAccountDaoImpl")
+    private AccountDao accountDao;
+}
+```
+
+### 纯注解模式
+
+改造xm+注解模式，将xml中遗留的内容全部以注解的形式迁移出去，最终删除xml，从Java配置类启动
+对应注解
+@Configuration 注解，表名当前类是⼀个配置类
+
+@ComponentScan 注解，替代 context:component-scan
+
+@PropertySource，引⼊外部属性配置⽂件
+
+@Import 引⼊其他配置类
+
+@Value 对变量赋值，可以直接赋值，也可以使⽤ ${} 读取资源配置⽂件中的信息
+
+@Bean 将⽅法返回对象加⼊ SpringIOC 容器
+
+## 自定义事务控制
+
+![image-20200821113902429](spring/images/image-20200821113902429.png)
+
+### 新建一个手工事务控制器类
+
+```java
+package com.zhengyao.edu.utils;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.sql.SQLException;
+
+/**
+ * @author zhengyao
+ *
+ * 事务管理器类：负责手动事务的开启、提交、回滚
+ */
+@Component("transactionManager")
+public class TransactionManager {
+
+
+    @Autowired
+    private ConnectionUtils connectionUtils;
+
+
+
+
+
+    // 开启手动事务控制
+    public void beginTransaction() throws SQLException {
+        connectionUtils.getCurrentThreadConn().setAutoCommit(false);
+    }
+
+
+    // 提交事务
+    public void commit() throws SQLException {
+        connectionUtils.getCurrentThreadConn().commit();
+    }
+
+
+    // 回滚事务
+    public void rollback() throws SQLException {
+        connectionUtils.getCurrentThreadConn().rollback();
+    }
+}
+
+```
+
+### 新建动态代理对象
+
+新建一个JDK、CGLIB动态代理对象工厂，用于生成动态代理对象
+
+```java
+package com.zhengyao.edu.factory;
+
+import com.zhengyao.edu.utils.TransactionManager;
+import net.sf.cglib.proxy.Enhancer;
+import net.sf.cglib.proxy.MethodInterceptor;
+import net.sf.cglib.proxy.MethodProxy;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+
+/**
+ * @author zhengyao
+ *
+ *
+ * 代理对象工厂：生成代理对象的
+ */
+
+
+@Component("proxyFactory")
+public class ProxyFactory {
+
+
+    @Autowired
+    private TransactionManager transactionManager;
+
+
+
+
+    /**
+     * Jdk动态代理
+     * @param obj  委托对象
+     * @return   代理对象
+     */
+    public Object getJdkProxy(Object obj) {
+
+        // 获取代理对象
+        return  Proxy.newProxyInstance(obj.getClass().getClassLoader(), obj.getClass().getInterfaces(),
+                new InvocationHandler() {
+                    @Override
+                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                        Object result = null;
+
+                        try{
+                            // 开启事务(关闭事务的自动提交)
+                            transactionManager.beginTransaction();
+
+                            result = method.invoke(obj,args);
+
+                            // 提交事务
+
+                            transactionManager.commit();
+                        }catch (Exception e) {
+                            e.printStackTrace();
+                            // 回滚事务
+                            transactionManager.rollback();
+
+                            // 抛出异常便于上层servlet捕获
+                            throw e;
+
+                        }
+
+                        return result;
+                    }
+                });
+
+    }
+
+
+    /**
+     * 使用cglib动态代理生成代理对象
+     * @param obj 委托对象
+     * @return
+     */
+    public Object getCglibProxy(Object obj) {
+        return  Enhancer.create(obj.getClass(), new MethodInterceptor() {
+            @Override
+            public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) throws Throwable {
+                Object result = null;
+                try{
+                    // 开启事务(关闭事务的自动提交)
+                    transactionManager.beginTransaction();
+
+                    result = method.invoke(obj,objects);
+
+                    // 提交事务
+
+                    transactionManager.commit();
+                }catch (Exception e) {
+                    e.printStackTrace();
+                    // 回滚事务
+                    transactionManager.rollback();
+
+                    // 抛出异常便于上层servlet捕获
+                    throw e;
+
+                }
+                return result;
+            }
+        });
+    }
+}
+
+```
+
+
+
+
+
 ## Spring中AOP的使用
 
 AOP本质：在不改变原有业务逻辑的情况下增强横切逻辑，横切逻辑代码往往是权限校验代码、⽇志代
@@ -872,6 +1097,179 @@ public class LogUtils {
 @Configuration
 @ComponentScan("com.zhengyao")
 @EnableAspectJAutoProxy //开启spring对注解AOP的⽀持
+public class SpringConfiguration {
+}
+```
+
+
+
+## Spring对事务的支持
+
+编程式事务：在业务代码中添加事务控制代码，这样的事务控制机制就叫做编程式事务
+
+声明式事务：通过xml或者注解配置的⽅式达到事务控制的⽬的，叫做声明式事务
+
+### 事务回顾
+
+#### **事务的概念**
+
+事务指逻辑上的⼀组操作，组成这组操作的各个单元，要么全部成功，要么全部不成功。从⽽确保了数
+据的准确与安全。
+
+例如：A——B转帐，对应于如下两条sql语句:
+
+```sql
+/*转出账户减钱*/
+update account set money=money-100 where name=‘a’;
+/**转⼊账户加钱*/
+update account set money=money+100 where name=‘b’;
+```
+
+这两条语句的执⾏，要么全部成功，要么全部不成功
+
+#### **事务的四⼤特性**
+
+**原⼦性（Atomicity）** 
+
+原⼦性是指事务是⼀个不可分割的⼯作单位，事务中的操作要么都发⽣，要么都
+不发⽣。从操作的⻆度来描述，事务中的各个操作要么都成功要么都失败
+
+**⼀致性（Consistency）** 
+
+事务必须使数据库从⼀个⼀致性状态变换到另外⼀个⼀致性状态。例如转账前A有1000，B有1000。转账后A+B也得是2000。⼀致性是从数据的⻆度来说的，（1000，1000） （900，1100），不应该出现（900，1000）
+
+**隔离性（Isolation）** 
+
+事务的隔离性是多个⽤户并发访问数据库时，数据库为每⼀个⽤户开启的事务，每个事务不能被其他事务的操作数据所⼲扰，多个并发事务之间要相互隔离。⽐如：事务1给员⼯涨⼯资2000，但是事务1尚未被提交，员⼯发起事务2查询⼯资，发现⼯资涨了2000块钱，读到了事务1尚未提交的数据（脏读）
+
+**持久性（Durability）**
+持久性是指⼀个事务⼀旦被提交，它对数据库中数据的改变就是永久性的，接下来即使数据库发⽣故障
+也不应该对其有任何影响
+
+#### **事务的隔离级别**
+
+不考虑隔离级别，会出现以下情况：（以下情况全是错误的），也即为隔离级别在解决事务并发问题
+
+**脏读：**⼀个线程中的事务读到了另外⼀个线程中未提交的数据。
+
+**不可重复读**：⼀个线程中的事务读到了另外⼀个线程中已经提交的update的数据（前后内容不⼀样,针对修改）
+场景：
+
+员⼯A发起事务1，查询⼯资，⼯资为1w，此时事务1尚未关闭
+
+财务⼈员发起了事务2，给员⼯A张了2000块钱，并且提交了事务
+
+员⼯A通过事务1再次发起查询请求，发现⼯资为1.2w，原来读出来1w读不到了，叫做不可重复读
+
+**虚读（幻读）**：⼀个线程中的事务读到了另外⼀个线程中已经提交的insert或者delete的数据（前后条数不⼀样，针对插入数据）
+场景：
+
+事务1查询所有⼯资为1w的员⼯的总数，查询出来了10个⼈，此时事务尚未关闭
+
+事务2财务⼈员发起，新来员⼯，⼯资1w，向表中插⼊了2条数据，并且提交了事务
+
+事务1再次查询⼯资为1w的员⼯个数，发现有12个⼈
+
+数据库共定义了四种隔离级别：
+**Serializable（串⾏化）**：可避免脏读、不可重复读、虚读情况的发⽣。（串⾏化） 最⾼
+
+**Repeatable read（可重复读）**：可避免脏读、不可重复读情况的发⽣。(幻读有可能发⽣) 第⼆该机制下会对要update的⾏进⾏加锁
+
+**Read committed（读已提交）**：可避免脏读情况发⽣。不可重复读和幻读⼀定会发⽣。 第三
+
+**Read uncommitted（读未提交）**：最低级别，以上情况均⽆法保证。(读未提交) 最低
+
+注意：级别依次升⾼，效率依次降低
+
+MySQL的默认隔离级别是：REPEATABLE READ
+
+查询当前使⽤的隔离级别： select @@tx_isolation;
+
+设置MySQL事务的隔离级别： set session transaction isolation level xxx; （设置的是当前mysql连接会话的，并不是永久改变的）
+
+### **Spring中的事务的传播⾏为**
+
+| PROPAGATION_REQUIRED      | 如果当前没有事务，就新建⼀个事务，如果已经存在⼀个事务中，加⼊到这个事务中。这是最常⻅的选择。 |
+| ------------------------- | ------------------------------------------------------------ |
+| PROPAGATION_SUPPORTS      | ⽀持当前事务，如果当前没有事务，就以⾮事务⽅式执⾏。         |
+| PROPAGATION_MANDATORY     | 使⽤当前的事务，如果当前没有事务，就抛出异常。               |
+| PROPAGATION_REQUIRES_NEW  | 新建事务，如果当前存在事务，把当前事务挂起。                 |
+| PROPAGATION_NOT_SUPPORTED | 以⾮事务⽅式执⾏操作，如果当前存在事务，就把当前事务挂起。   |
+| PROPAGATION_NEVER         | 以⾮事务⽅式执⾏，如果当前存在事务，则抛出异常。             |
+| PROPAGATION_NESTED        | 如果当前存在事务，则在嵌套事务内执⾏。如果当前没有事务，则执⾏与PROPAGATION_REQUIRED类似的操作。 |
+
+## Spring 声明式事务配置
+
+### 纯xml模式
+
+```xml
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-context</artifactId>
+    <version>5.1.12.RELEASE</version>
+</dependency>
+<dependency>
+    <groupId>org.aspectj</groupId>
+    <artifactId>aspectjweaver</artifactId>
+    <version>1.9.4</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-jdbc</artifactId>
+    <version>5.1.12.RELEASE</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-tx</artifactId>
+    <version>5.1.12.RELEASE</version>
+</dependency>
+```
+
+XML的配置
+
+```xml
+<tx:advice id="txAdvice" transaction-manager="transactionManager">
+    <!--定制事务细节，传播⾏为、隔离级别等-->
+    <tx:attributes>
+    <!--⼀般性配置-->
+    <tx:method name="*" read-only="false"
+    propagation="REQUIRED" isolation="DEFAULT" timeout="-1"/>
+    <!--针对查询的覆盖性配置-->
+    <tx:method name="query*" read-only="true"
+    propagation="SUPPORTS"/>
+    </tx:attributes>
+</tx:advice>
+<aop:config>
+    <!--advice-ref指向增强=横切逻辑+⽅位-->
+    <aop:advisor advice-ref="txAdvice" pointcut="execution(*com.lagou.edu.service.impl.TransferServiceImpl.*(..))"/>
+</aop:config>
+```
+
+### 基于XML+注解
+
+```xml
+<!--配置事务管理器-->
+<bean id="transactionManager"
+class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+<property name="dataSource" ref="dataSource"></property>
+</bean>
+<!--开启spring对注解事务的⽀持-->
+<tx:annotation-driven transaction-manager="transactionManager"/>
+```
+
+在接⼝、类或者⽅法上添加@Transactional注解
+
+```java
+@Transactional(readOnly = true,propagation = Propagation.SUPPORTS)
+```
+
+### 基于纯注解
+
+Spring基于注解驱动开发的事务控制配置，只需要把 xml 配置部分改为注解实现。只是需要⼀个
+注解替换掉xml配置⽂件中的 `<tx:annotation-driven transaction-manager="transactionManager"/>` 配置。在 Spring 的配置类上添加 @EnableTransactionManagement 注解即可
+
+```java
+@EnableTransactionManagement//开启spring注解事务的⽀持
 public class SpringConfiguration {
 }
 ```

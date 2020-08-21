@@ -44,8 +44,12 @@ public class MybatisTest {
         user.setId(6);
         user.setUsername("tom");
         sqlSession.insert("com.zhengyao.mybatis.dao.IUserDao.saveUser",user);
+//    <foreach item="item" index="index" collection="list"
+//     open="(" separator="," close=")">
+//       #{item}
+//    </foreach>
 
-
+        
         sqlSession.close();
     }
 
@@ -56,7 +60,7 @@ public class MybatisTest {
         SqlSession sqlSession = sqlSessionFactory.openSession();
 
         User user = new User();
-        user.setId(4);
+        user.setId(6);
         user.setUsername("lucy");
         sqlSession.update("com.zhengyao.mybatis.dao.IUserDao.updateUser",user);
         sqlSession.commit();
@@ -109,8 +113,6 @@ public class MybatisTest {
         for (User user : all) {
             System.out.println(user);
         }
-
-
     }
 
     @Test

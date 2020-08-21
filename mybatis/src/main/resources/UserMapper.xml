@@ -4,6 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.zhengyao.mybatis.dao.IUserDao">
+    <!--com.zhengyao.mybatis.dao.IUserDao-->
     <!--namespace : 名称空间：与id组成sql的唯一标识
         resultType： 表明返回值类型-->
 
@@ -23,6 +24,7 @@
     <insert id="saveUser" parameterType="user" >
         insert into user(id,username) values(#{id},#{username})
     </insert>
+    
 
     <!--修改-->
     <update id="updateUser" parameterType="user">
@@ -35,15 +37,17 @@
     </delete>
 
     <!--多条件组合查询：演示if-->
-    <select id="findByCondition" parameterType="user" resultType="user">
+    <select id="findByCondition" parameterType="com.zhengyao.mybatis.pojo.User" 
+            resultType="com.zhengyao.mybatis.pojo.User">
         <include refid="selectUser"></include>
         <where>
-        <if test="id !=null">
-            and id = #{id}
-        </if>
-        <if test="username !=null">
-            and username = #{username}
-        </if>
+<!-- select * from user where and id = 1 and username=username-->
+            <if test="id !=null">
+                and id = #{id}
+            </if>
+            <if test="username !=null">
+                and username = #{username}
+            </if>
         </where>
 
     </select>
